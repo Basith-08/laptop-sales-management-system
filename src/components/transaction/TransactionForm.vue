@@ -29,8 +29,9 @@
 </template>
 
 <script setup lang="ts">
-
+import dayjs, { type Dayjs } from 'dayjs'
 import { reactive, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import { createTransaction, updateTransaction } from '../../services/transactionService'
 import { calculateTransaction } from '../../utils/taxCalculator'
 import type { Transaction } from '../../types/transaction'
@@ -42,8 +43,17 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:open', 'saved'])
 
-const form = reactive<any>({
-    transaction_date: '',
+type TransactionFormState = {
+    transaction_date: Dayjs | null
+    customer_name: string
+    laptop_brand: string
+    laptop_model: string
+    price: number
+    quantity: number
+}
+
+const getInitialForm = (): TransactionFormState => ({
+    transaction_date: null,
     customer_name: '',
     laptop_brand: '',
     laptop_model: '',
@@ -51,28 +61,64 @@ const form = reactive<any>({
     quantity: 1
 })
 
-watch(() => props.editingData, (data) => {
-    if (data) {
-        Object.assign(form, data)
+const form = reactive<TransactionFormState>(getInitialForm())
+
+const resetForm = () => {
+    Object.assign(form, getInitialForm())
+}
+
+watch(
+    [() => props.open, () => props.editingData],
+    ([isOpen, data]) => {
+        if (!isOpen) return
+
+        if (data) {
+            Object.assign(form, {
+                transaction_date: data.transaction_date ? dayjs(data.transaction_date) : null,
+                customer_name: data.customer_name,
+                laptop_brand: data.laptop_brand,
+                laptop_model: data.laptop_model,
+                price: Number(data.price || 0),
+                quantity: Number(data.quantity || 1)
+            })
+            return
+        }
+
+        resetForm()
     }
-})
+)
 
 const close = () => {
     emit('update:open', false)
 }
 
 const submit = async () => {
+    if (!form.transaction_date || !form.customer_name || !form.laptop_brand || !form.laptop_model) {
+        message.error('Semua field wajib diisi')
+        return
+    }
+
     const calc = calculateTransaction(form.price, form.quantity)
     const payload = {
-        ...form,
+        transaction_date: form.transaction_date.format('YYYY-MM-DD'),
+        customer_name: form.customer_name,
+        laptop_brand: form.laptop_brand,
+        laptop_model: form.laptop_model,
+        price: form.price,
+        quantity: form.quantity,
         ...calc
     }
+
     if (props.editingData) {
         await updateTransaction(props.editingData.id!, payload)
+        message.success('Transaction updated')
     } else {
         await createTransaction(payload)
+        message.success('Transaction created')
     }
+
     emit('saved')
+    resetForm()
     close()
 }
 </script>
