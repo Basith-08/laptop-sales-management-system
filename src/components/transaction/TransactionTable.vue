@@ -17,7 +17,7 @@
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <a-table :columns="columns" :data-source="transactions" rowKey="id" class="[&_.ant-table-thead>tr>th]:!bg-slate-50 [&_.ant-table-thead>tr>th]:!text-slate-700">
+            <a-table :columns="columns" :data-source="transactions" :scroll="{ x: 1400 }" rowKey="id" class="[&_.ant-table-thead>tr>th]:!bg-slate-50 [&_.ant-table-thead>tr>th]:!text-slate-700">
                 <template #bodyCell="{ column, record }">
                     <template v-if="column.key === 'actions'">
                         <div class="flex items-center gap-2">
@@ -63,13 +63,43 @@ const deletingId = ref<string | null>(null)
 
 const editingData = ref<Transaction | null>(null)
 
+const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0
+    }).format(Number(value || 0))
+
 const columns = [
-    { title: 'Customer', dataIndex: 'customer_name' },
-    { title: 'Brand', dataIndex: 'laptop_brand' },
+    { title: 'Customer Name', dataIndex: 'customer_name' },
+    { title: 'Laptop Brand', dataIndex: 'laptop_brand' },
     { title: 'Model', dataIndex: 'laptop_model' },
-    { title: 'Price', dataIndex: 'price' },
-    { title: 'Qty', dataIndex: 'quantity' },
-    { title: 'Total', dataIndex: 'total_price' },
+    {
+        title: 'Price',
+        dataIndex: 'price',
+        customRender: ({ value }: { value: number }) => formatCurrency(value)
+    },
+    { title: 'Quantity', dataIndex: 'quantity' },
+    {
+        title: 'Subtotal',
+        dataIndex: 'subtotal',
+        customRender: ({ value }: { value: number }) => formatCurrency(value)
+    },
+    {
+        title: 'PPN',
+        dataIndex: 'ppn',
+        customRender: ({ value }: { value: number }) => formatCurrency(value)
+    },
+    {
+        title: 'PPh',
+        dataIndex: 'pph',
+        customRender: ({ value }: { value: number }) => formatCurrency(value)
+    },
+    {
+        title: 'Total Price',
+        dataIndex: 'total_price',
+        customRender: ({ value }: { value: number }) => formatCurrency(value)
+    },
     { title: 'Actions', key: 'actions', width: 180 }
 ]
 

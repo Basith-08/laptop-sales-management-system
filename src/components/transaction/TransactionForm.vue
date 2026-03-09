@@ -52,6 +52,10 @@ type TransactionFormState = {
     quantity: number
 }
 
+type TransactionPayload = Omit<Transaction, 'id' | 'created_at'>
+
+const WEBHOOK_URL = import.meta.env.VITE_NEW_TRANSACTION_WEBHOOK_URL
+
 const getInitialForm = (): TransactionFormState => ({
     transaction_date: null,
     customer_name: '',
@@ -67,20 +71,59 @@ const resetForm = () => {
     Object.assign(form, getInitialForm())
 }
 
+const mapEditingDataToForm = (data: Transaction) => ({
+    transaction_date: data.transaction_date ? dayjs(data.transaction_date) : null,
+    customer_name: data.customer_name,
+    laptop_brand: data.laptop_brand,
+    laptop_model: data.laptop_model,
+    price: Number(data.price || 0),
+    quantity: Number(data.quantity || 1)
+})
+
+const isFormInvalid = () =>
+    !form.transaction_date || !form.customer_name || !form.laptop_brand || !form.laptop_model
+
+const buildPayload = (): TransactionPayload => {
+    const calc = calculateTransaction(form.price, form.quantity)
+
+    return {
+        transaction_date: form.transaction_date!.format('YYYY-MM-DD'),
+        customer_name: form.customer_name,
+        laptop_brand: form.laptop_brand,
+        laptop_model: form.laptop_model,
+        price: form.price,
+        quantity: form.quantity,
+        ...calc
+    }
+}
+
+const notifyWebhook = async (payload: TransactionPayload) => {
+    if (!WEBHOOK_URL) return
+
+    try {
+        await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                customer_name: form.customer_name,
+                laptop_model: form.laptop_model,
+                total_price: payload.total_price
+            })
+        })
+    } catch (error) {
+        console.error('Failed to send webhook new-transaction:', error)
+    }
+}
+
 watch(
     [() => props.open, () => props.editingData],
     ([isOpen, data]) => {
         if (!isOpen) return
 
         if (data) {
-            Object.assign(form, {
-                transaction_date: data.transaction_date ? dayjs(data.transaction_date) : null,
-                customer_name: data.customer_name,
-                laptop_brand: data.laptop_brand,
-                laptop_model: data.laptop_model,
-                price: Number(data.price || 0),
-                quantity: Number(data.quantity || 1)
-            })
+            Object.assign(form, mapEditingDataToForm(data))
             return
         }
 
@@ -93,30 +136,27 @@ const close = () => {
 }
 
 const submit = async () => {
-    if (!form.transaction_date || !form.customer_name || !form.laptop_brand || !form.laptop_model) {
+    if (isFormInvalid()) {
         message.error('Semua field wajib diisi')
         return
     }
 
-    const calc = calculateTransaction(form.price, form.quantity)
-    const payload = {
-        transaction_date: form.transaction_date.format('YYYY-MM-DD'),
-        customer_name: form.customer_name,
-        laptop_brand: form.laptop_brand,
-        laptop_model: form.laptop_model,
-        price: form.price,
-        quantity: form.quantity,
-        ...calc
+    const payload = buildPayload()
+
+    try {
+        if (props.editingData) {
+            await updateTransaction(props.editingData.id!, payload)
+            message.success('Transaction updated')
+        } else {
+            await createTransaction(payload)
+            message.success('Transaction created')
+        }
+    } catch {
+        message.error('Failed to save transaction')
+        return
     }
 
-    if (props.editingData) {
-        await updateTransaction(props.editingData.id!, payload)
-        message.success('Transaction updated')
-    } else {
-        await createTransaction(payload)
-        message.success('Transaction created')
-    }
-
+    await notifyWebhook(payload)
     emit('saved')
     resetForm()
     close()
